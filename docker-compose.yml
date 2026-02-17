@@ -1,0 +1,9 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: orm_platform
+      POSTGRES_USER: orm_user
+      POSTGRES_PASSWORD: orm_pass
+    ports:
+      - "5432:5432"
