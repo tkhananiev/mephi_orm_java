@@ -64,10 +64,6 @@ public class CourseService {
         return courseRepository.save(course);
     }
 
-    /**
-     * Required by BusinessFlowTest:
-     * addModule(courseId, title, orderIndex, description)
-     */
     @Transactional
     public CourseModule addModule(Long courseId, String title, int orderIndex, String description) {
         Course course = courseRepository.findById(courseId)
@@ -83,9 +79,26 @@ public class CourseService {
         try {
             return courseModuleRepository.save(module);
         } catch (DataIntegrityViolationException e) {
-            // unique constraint uk_module_course_order (course_id, order_index)
             throw new ConflictException("Module with orderIndex=" + orderIndex + " already exists for course=" + courseId);
         }
+    }
+
+    /**
+     * Новый метод для Lessons API
+     */
+    @Transactional
+    public Lesson addLesson(Long moduleId, String title, String content, String videoUrl) {
+        CourseModule module = courseModuleRepository.findById(moduleId)
+                .orElseThrow(() -> new NotFoundException("Module not found: " + moduleId));
+
+        Lesson lesson = Lesson.builder()
+                .courseModule(module)
+                .title(title)
+                .content(content)
+                .videoUrl(videoUrl)
+                .build();
+
+        return lessonRepository.save(lesson);
     }
 
     @Transactional(readOnly = true)
