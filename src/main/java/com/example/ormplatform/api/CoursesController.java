@@ -10,6 +10,7 @@ import com.example.ormplatform.entity.Lesson;
 import com.example.ormplatform.service.CourseService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Comparator;
@@ -56,7 +57,6 @@ public class CoursesController {
     }
 
     /**
-     * Новый endpoint:
      * POST /api/courses/{courseId}/modules
      */
     @PostMapping("/{courseId}/modules")
@@ -71,6 +71,16 @@ public class CoursesController {
         );
 
         return toStructureDto(courseService.getCourseWithStructure(courseId));
+    }
+
+    /**
+     * DELETE /api/courses/{id}
+     * 204 No Content
+     */
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void delete(@PathVariable Long id) {
+        courseService.deleteCourse(id);
     }
 
     private CourseDto toCourseDto(Course c) {

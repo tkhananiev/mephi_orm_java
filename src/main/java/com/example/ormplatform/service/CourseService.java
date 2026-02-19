@@ -84,7 +84,7 @@ public class CourseService {
     }
 
     /**
-     * Новый метод для Lessons API
+     * Lessons API
      */
     @Transactional
     public Lesson addLesson(Long moduleId, String title, String content, String videoUrl) {
@@ -99,6 +99,27 @@ public class CourseService {
                 .build();
 
         return lessonRepository.save(lesson);
+    }
+
+    /**
+     * Course DELETE
+     */
+    @Transactional
+    public void deleteCourse(Long id) {
+        Course course = courseRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Course not found: " + id));
+
+        // Важно: разорвать owning ManyToMany, чтобы корректно подчистилась join-таблица (например course_tag)
+        if (course.getTags() != null && !course.getTags().isEmpty()) {
+            course.getTags().clear();
+        }
+
+        try {
+            courseRepository.delete(course);
+            courseRepository.flush(); // чтобы FK/DataIntegrityViolation прилетел сразу и обработался глобальным handler’ом
+        } catch (DataIntegrityViolationException e) {
+            throw new ConflictException("Course " + id + " cannot be deleted because it has dependent data");
+        }
     }
 
     @Transactional(readOnly = true)
