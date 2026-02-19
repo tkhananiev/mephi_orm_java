@@ -3,6 +3,7 @@ package com.example.ormplatform.api;
 import com.example.ormplatform.dto.CourseDto;
 import com.example.ormplatform.dto.CourseStructureDto;
 import com.example.ormplatform.dto.CreateCourseRequest;
+import com.example.ormplatform.dto.CreateModuleRequest;
 import com.example.ormplatform.entity.Course;
 import com.example.ormplatform.entity.CourseModule;
 import com.example.ormplatform.entity.Lesson;
@@ -54,12 +55,28 @@ public class CoursesController {
         return toCourseDto(created);
     }
 
+    /**
+     * Новый endpoint:
+     * POST /api/courses/{courseId}/modules
+     */
+    @PostMapping("/{courseId}/modules")
+    public CourseStructureDto addModule(@PathVariable Long courseId,
+                                        @Valid @RequestBody CreateModuleRequest request) {
+
+        courseService.addModule(
+                courseId,
+                request.getTitle(),
+                request.getOrderIndex(),
+                request.getDescription()
+        );
+
+        return toStructureDto(courseService.getCourseWithStructure(courseId));
+    }
+
     private CourseDto toCourseDto(Course c) {
         Set<String> tags = (c.getTags() == null)
                 ? Set.of()
-                : c.getTags().stream()
-                .map(t -> t.getName())
-                .collect(Collectors.toSet());
+                : c.getTags().stream().map(t -> t.getName()).collect(Collectors.toSet());
 
         return new CourseDto(
                 c.getId(),
@@ -76,9 +93,7 @@ public class CoursesController {
     private CourseStructureDto toStructureDto(Course c) {
         Set<String> tags = (c.getTags() == null)
                 ? Set.of()
-                : c.getTags().stream()
-                .map(t -> t.getName())
-                .collect(Collectors.toSet());
+                : c.getTags().stream().map(t -> t.getName()).collect(Collectors.toSet());
 
         List<CourseStructureDto.ModuleDto> modules = (c.getModules() == null)
                 ? List.of()
@@ -101,8 +116,6 @@ public class CoursesController {
     }
 
     private CourseStructureDto.ModuleDto toModuleDto(CourseModule m) {
-        // В Lesson нет orderIndex, поэтому сортировка уроков по порядку невозможна по модели.
-        // Возвращаем как есть; DTO.orderIndex для урока будет null.
         List<CourseStructureDto.LessonDto> lessons = (m.getLessons() == null)
                 ? List.of()
                 : m.getLessons().stream()
