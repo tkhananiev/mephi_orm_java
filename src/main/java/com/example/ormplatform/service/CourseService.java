@@ -1,115 +1,107 @@
 package com.example.ormplatform.service;
 
-import com.example.ormplatform.entity.Course;
-import com.example.ormplatform.entity.CourseModule;
-import com.example.ormplatform.entity.Lesson;
-import com.example.ormplatform.repository.CourseRepository;
+import com.example.ormplatform.entity.*;
+import com.example.ormplatform.repository.*;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
 public class CourseService {
 
     private final CourseRepository courseRepository;
+    private final CategoryRepository categoryRepository;
+    private final UserRepository userRepository;
+    private final CourseModuleRepository courseModuleRepository;
+    private final LessonRepository lessonRepository;
+    private final TagRepository tagRepository;
 
-    public record CourseSummaryDto(
-            Long id,
-            String title,
-            String description,
-            Integer durationHours,
-            LocalDate startDate,
-            Long categoryId,
-            Long teacherId
-    ) { }
+    @Transactional
+    public Course createCourse(String title,
+                               String description,
+                               Long categoryId,
+                               Long teacherId,
+                               Integer durationHours,
+                               LocalDate startDate,
+                               Set<String> tagNames) {
 
-    public record LessonDto(Long id, String title, String content, String videoUrl) { }
+        Category category = categoryRepository.findById(categoryId)
+                .orElseThrow(() -> new NotFoundException("Category not found: " + categoryId));
 
-    public record ModuleDto(
-            Long id,
-            String title,
-            Integer orderIndex,
-            String description,
-            List<LessonDto> lessons
-    ) { }
+        User teacher = userRepository.findById(teacherId)
+                .orElseThrow(() -> new NotFoundException("Teacher not found: " + teacherId));
 
-    public record CourseStructureDto(
-            Long id,
-            String title,
-            String description,
-            Integer durationHours,
-            LocalDate startDate,
-            Long categoryId,
-            Long teacherId,
-            List<ModuleDto> modules
-    ) { }
+        if (teacher.getRole() != UserRole.TEACHER && teacher.getRole() != UserRole.ADMIN) {
+            throw new ConflictException("User is not allowed to be a teacher: " + teacherId);
+        }
 
-    @Transactional(readOnly = true)
-    public List<CourseSummaryDto> listCourses() {
-        return courseRepository.findAllProjectedBy().stream()
-                .map(v -> new CourseSummaryDto(
-                        v.getId(),
-                        v.getTitle(),
-                        v.getDescription(),
-                        v.getDurationHours(),
-                        v.getStartDate(),
-                        v.getCategory() != null ? v.getCategory().getId() : null,
-                        v.getTeacher() != null ? v.getTeacher().getId() : null
-                ))
-                .toList();
+        Course course = Course.builder()
+                .title(title)
+                .description(description)
+                .category(category)
+                .teacher(teacher)
+                .durationHours(durationHours)
+                .startDate(startDate)
+                .build();
+
+        if (tagNames != null && !tagNames.isEmpty()) {
+            Set<Tag> tags = new HashSet<>();
+            for (String tagName : tagNames) {
+                Tag tag = tagRepository.findByName(tagName)
+                        .orElseGet(() -> tagRepository.save(Tag.builder().name(tagName).build()));
+                tags.add(tag);
+            }
+            course.setTags(tags);
+        }
+
+        return courseRepository.save(course);
+    }
+
+    /**
+     * Required by BusinessFlowTest:
+     * addModule(courseId, title, orderIndex, description)
+     */
+    @Transactional
+    public CourseModule addModule(Long courseId, String title, int orderIndex, String description) {
+        Course course = courseRepository.findById(courseId)
+                .orElseThrow(() -> new NotFoundException("Course not found: " + courseId));
+
+        CourseModule module = CourseModule.builder()
+                .course(course)
+                .title(title)
+                .orderIndex(orderIndex)
+                .description(description)
+                .build();
+
+        try {
+            return courseModuleRepository.save(module);
+        } catch (DataIntegrityViolationException e) {
+            // unique constraint uk_module_course_order (course_id, order_index)
+            throw new ConflictException("Module with orderIndex=" + orderIndex + " already exists for course=" + courseId);
+        }
     }
 
     @Transactional(readOnly = true)
-    public CourseSummaryDto getCourse(Long id) {
-        var v = courseRepository.findProjectedById(id)
+    public Course getCourse(Long id) {
+        return courseRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Course not found: " + id));
-
-        return new CourseSummaryDto(
-                v.getId(),
-                v.getTitle(),
-                v.getDescription(),
-                v.getDurationHours(),
-                v.getStartDate(),
-                v.getCategory() != null ? v.getCategory().getId() : null,
-                v.getTeacher() != null ? v.getTeacher().getId() : null
-        );
     }
 
     @Transactional(readOnly = true)
-    public CourseStructureDto getCourseWithStructure(Long id) {
-        Course course = courseRepository.findWithStructureById(id)
+    public Course getCourseWithStructure(Long id) {
+        return courseRepository.findWithStructureById(id)
                 .orElseThrow(() -> new NotFoundException("Course not found: " + id));
+    }
 
-        List<ModuleDto> modules = course.getModules().stream()
-                .map(m -> new ModuleDto(
-                        m.getId(),
-                        m.getTitle(),
-                        m.getOrderIndex(),
-                        m.getDescription(),
-                        m.getLessons().stream()
-                                .map(l -> new LessonDto(
-                                        l.getId(),
-                                        l.getTitle(),
-                                        l.getContent(),
-                                        l.getVideoUrl()
-                                ))
-                                .toList()
-                ))
-                .toList();
-
-        return new CourseStructureDto(
-                course.getId(),
-                course.getTitle(),
-                course.getDescription(),
-                course.getDurationHours(),
-                course.getStartDate(),
-                course.getCategory() != null ? course.getCategory().getId() : null,
-                course.getTeacher() != null ? course.getTeacher().getId() : null,
-                modules
-        );
+    @Transactional(readOnly = true)
+    public List<Course> listCourses() {
+        return courseRepository.findAll();
     }
 }
