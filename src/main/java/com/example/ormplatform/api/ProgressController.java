@@ -1,11 +1,14 @@
 package com.example.ormplatform.api;
 
+import com.example.ormplatform.dto.CourseProgressDto;
 import com.example.ormplatform.dto.LessonCompleteRequest;
 import com.example.ormplatform.dto.LessonProgressDto;
+import com.example.ormplatform.entity.Course;
 import com.example.ormplatform.entity.Lesson;
 import com.example.ormplatform.entity.LessonProgress;
 import com.example.ormplatform.entity.User;
 import com.example.ormplatform.entity.UserRole;
+import com.example.ormplatform.repository.CourseRepository;
 import com.example.ormplatform.repository.LessonProgressRepository;
 import com.example.ormplatform.repository.LessonRepository;
 import com.example.ormplatform.repository.UserRepository;
@@ -24,6 +27,7 @@ public class ProgressController {
     private final LessonProgressRepository lessonProgressRepository;
     private final LessonRepository lessonRepository;
     private final UserRepository userRepository;
+    private final CourseRepository courseRepository;
 
     @PostMapping("/complete")
     @ResponseStatus(HttpStatus.CREATED)
@@ -58,5 +62,40 @@ public class ProgressController {
                 saved.getCompletedAt()
         );
     }
-}
 
+    /**
+     * GET /api/progress/course?courseId=1&studentId=3
+     */
+    @GetMapping("/course")
+    public CourseProgressDto courseProgress(@RequestParam Long courseId, @RequestParam Long studentId) {
+
+        User student = userRepository.findById(studentId)
+                .orElseThrow(() -> new NotFoundException("Student not found: " + studentId));
+
+        if (student.getRole() != UserRole.STUDENT) {
+            throw new ConflictException("User is not allowed to view progress as student: " + studentId);
+        }
+
+        Course course = courseRepository.findWithStructureById(courseId)
+                .orElseThrow(() -> new NotFoundException("Course not found: " + courseId));
+
+        long totalLessons = 0L;
+        if (course.getModules() != null) {
+            for (var m : course.getModules()) {
+                if (m.getLessons() != null) {
+                    totalLessons += m.getLessons().size();
+                }
+            }
+        }
+
+        long completedLessons = lessonProgressRepository
+                .countByStudentIdAndLesson_CourseModule_Course_Id(studentId, courseId);
+
+        int percent = 0;
+        if (totalLessons > 0) {
+            percent = (int) Math.round((completedLessons * 100.0) / totalLessons);
+        }
+
+        return new CourseProgressDto(courseId, studentId, totalLessons, completedLessons, percent);
+    }
+}
